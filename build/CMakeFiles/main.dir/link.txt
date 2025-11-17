@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG -Wl,--dependency-file=CMakeFiles/main.dir/link.d CMakeFiles/main.dir/cpp_src/main.cpp.o -o main  -Wl,-rpath,/home/emre/Desktop/Dev/python-cpptranspiler/build/third_party/cpr/cpr:/home/emre/Desktop/Dev/python-cpptranspiler/build/_deps/curl-build/lib third_party/cpr/cpr/libcpr.so.1.13.0 _deps/curl-build/lib/libcurl.so.4.8.0

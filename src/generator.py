@@ -132,7 +132,15 @@ class CppGenerator(ast.NodeVisitor):
             function_name = self.current_class
             self.code.append(f"{self.indent()}{function_name}({', '.join([self.visit(arg) for arg in args])}) {{")
         else:
-            return_type = self.visit(node.returns) if node.returns else "void"
+            # Check if function returns a tuple (scan for tuple returns)
+            returns_tuple = self._function_returns_tuple(node)
+
+            if returns_tuple:
+                return_type = "auto"
+                self.headers.add("<tuple>")
+            else:
+                return_type = self.visit(node.returns) if node.returns else "void"
+
             function_name = node.name
             args_str = ', '.join([self.visit(arg) for arg in args])
             if is_method:
@@ -145,6 +153,13 @@ class CppGenerator(ast.NodeVisitor):
             self.visit(stmt)
         self.indentation_level -= 1
         self.code.append(f"{self.indent()}}}")
+
+    def _function_returns_tuple(self, node):
+        """Check if a function returns a tuple"""
+        for stmt in ast.walk(node):
+            if isinstance(stmt, ast.Return) and stmt.value and isinstance(stmt.value, ast.Tuple):
+                return True
+        return False
 
     def visit_AsyncFunctionDef(self, node):
         # Async function - generate C++20 coroutine
@@ -207,6 +222,16 @@ class CppGenerator(ast.NodeVisitor):
 
     def visit_Assign(self, node):
         target_node = node.targets[0]
+
+        # Check if this is tuple unpacking (x, y = ...)
+        if isinstance(target_node, ast.Tuple):
+            self.headers.add("<tuple>")
+            # C++17 structured bindings
+            vars = [self.visit(elt) for elt in target_node.elts]
+            value = self.visit(node.value)
+            self.code.append(f"{self.indent()}auto [{', '.join(vars)}] = {value};")
+            return
+
         target = self.visit(target_node)
         value = self.visit(node.value)
 
@@ -526,7 +551,14 @@ class CppGenerator(ast.NodeVisitor):
         self.code.append(f"{self.indent()}{value};")
 
     def visit_Return(self, node):
-        value = self.visit(node.value)
+        # Check if we're returning a tuple (multiple values)
+        if isinstance(node.value, ast.Tuple):
+            self.headers.add("<tuple>")
+            elements = [self.visit(elt) for elt in node.value.elts]
+            value = f"std::make_tuple({', '.join(elements)})"
+        else:
+            value = self.visit(node.value)
+
         # Use co_return in async functions
         if self.current_function_is_async:
             self.code.append(f"{self.indent()}co_return {value};")

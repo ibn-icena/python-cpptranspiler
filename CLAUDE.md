@@ -106,6 +106,7 @@ The transpiler now supports:
 - **Lambda functions** → C++ lambdas with auto parameters - **NEW**
 - **List comprehensions** with filters and nesting → IIFE pattern - **NEW**
 - **Exception handling** (try/except/finally/raise) → C++ try/catch - **NEW**
+- **Tuple unpacking and multiple returns** → C++17 structured bindings - **NEW**
 - Classes with constructors (__init__) and methods
 - Control flow: if/else, for loops, while loops
 - Loop control: break, continue
@@ -209,6 +210,17 @@ Type Inference:
   - `FileNotFoundError`, `IOError` → `std::runtime_error`
 - **Note:** C++ finally doesn't have same semantics as Python (won't execute on uncaught exceptions)
 
+**Tuple Unpacking and Multiple Returns:** - **NEW**
+- Multiple returns: `return x, y` → `return std::make_tuple(x, y)`
+- Function return type: auto-detected, uses `auto` for tuple-returning functions
+- Tuple unpacking: `a, b = func()` → `auto [a, b] = func()`
+- Direct unpacking: `x, y = (1, 2)` → `auto [x, y] = {1, 2}`
+- Works with any number of elements: `a, b, c = get_triple()`
+- Uses C++17 structured bindings for clean syntax
+- Requires C++17 or later
+- **Limitation:** Cannot reassign existing variables (e.g., swap idiom `a, b = b, a` not supported)
+- **Note:** Functions returning tuples automatically get `auto` return type
+
 **String Methods (via string_utils.hpp):** - **NEW**
 - `.upper()` → std::transform with ::toupper
 - `.lower()` → std::transform with ::tolower
@@ -244,7 +256,6 @@ Type Inference:
 The transpiler does NOT yet support:
 - Decorators
 - Dict/Set comprehensions (list comprehensions are supported)
-- Multiple return values / tuple unpacking
 - Context managers (with statements)
 - Generators and iterators
 - Multiple inheritance
@@ -253,6 +264,7 @@ The transpiler does NOT yet support:
 - List/String slicing (subscripting works)
 - Set operations
 - File I/O operations
+- Variable reassignment via tuple unpacking (swap idiom)
 
 ## Adding Support for New Python Features
 

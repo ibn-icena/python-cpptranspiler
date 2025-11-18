@@ -229,5 +229,16 @@ void test_list_methods() {
         self.assertIn("throw std::invalid_argument", cpp_code)
         self.assertIn("Cleanup", cpp_code)  # Finally block content
 
+    def test_generate_tuple_unpacking(self):
+        ast_tree = parse_file("examples/tuple_unpacking_example.py")
+        cpp_code = generate_cpp(ast_tree)
+        # Verify key tuple unpacking elements
+        self.assertIn("<tuple>", cpp_code)
+        self.assertIn("auto get_coords()", cpp_code)  # Function returns auto for tuple
+        self.assertIn("std::make_tuple(x, y)", cpp_code)  # Tuple creation
+        self.assertIn("auto [result_x, result_y] = get_coords()", cpp_code)  # Structured binding
+        self.assertIn("auto [a, b] =", cpp_code)  # Direct unpacking
+        self.assertIn("auto [x, y, z] = get_triple()", cpp_code)  # Triple unpacking
+
 if __name__ == "__main__":
     unittest.main()

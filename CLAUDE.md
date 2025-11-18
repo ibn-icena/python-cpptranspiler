@@ -96,27 +96,70 @@ The transpiler requires Python type annotations to generate proper C++ types:
 
 Functions must have parameter type annotations. Return type annotations are optional (defaults to `void`).
 
-## Current Limitations
+## Current Capabilities
 
-Based on the visitor methods, the transpiler currently supports:
+The transpiler now supports:
+
+**Core Language Features:**
 - Function definitions with type annotations
-- Basic control flow: if/else, for loops
+- Classes with constructors (__init__) and methods
+- Control flow: if/else, for loops, while loops
+- Loop control: break, continue
 - Binary operations: +, -, *, /
+- Unary operations: +, -, ! (not)
 - Comparisons: >, <, ==, !=, >=, <=
+- Boolean operators: and (&&), or (||), not (!)
 - Variable assignments and augmented assignments
-- Function calls
+- Function calls and method calls
 - String literals and f-strings
 - List subscripting and type annotations
+- Print function (maps to std::cout)
+
+**Python Standard Library Support:**
+- `requests` module (via CPR library wrapper)
+- `json` module (via nlohmann/json)
+- `math` module (maps to <cmath>)
+- `os` module (basic support via <filesystem>)
+- `sys` module (partial support)
+
+**Built-in Functions:**
+- `print()` → `std::cout`
+- `len()` → `.size()`
+- `str()` → `std::to_string()`
+- `int()` → `std::stoi()`
+
+**String Methods:**
+- `.upper()` → std::transform with ::toupper
+- `.lower()` → std::transform with ::tolower
+
+**List Methods:**
+- `.append()` → `.push_back()`
+- `.pop()` → `.pop_back()` or `.erase()`
+
+**Class Support:**
+- Class definitions with member variables
+- Constructors (__init__ → ClassName constructor)
+- Methods (self parameter automatically removed)
+- Member variable type inference from constructor parameters
+
+## Current Limitations
 
 The transpiler does NOT yet support:
-- Classes and methods
-- While loops
-- Exception handling
+- Exception handling (try/except)
 - Decorators
 - Lambda functions
-- Comprehensions
+- Comprehensions (list/dict/set)
 - Multiple return values / tuple unpacking
-- Most Python standard library modules (only `requests` has special support)
+- Context managers (with statements)
+- Generators and iterators
+- Multiple inheritance
+- Property decorators
+- Static and class methods
+- Advanced string methods (.split(), .join(), .strip(), etc.)
+- Advanced list operations (slicing, .extend(), .insert(), etc.)
+- Dictionary iteration and methods
+- Set operations
+- File I/O operations
 
 ## Adding Support for New Python Features
 

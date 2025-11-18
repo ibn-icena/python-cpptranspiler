@@ -128,5 +128,84 @@ public:
 };"""
         self.assertEqual(cpp_code, expected_code)
 
+    def test_generate_lambda(self):
+        ast_tree = parse_file("examples/lambda_example.py")
+        cpp_code = generate_cpp(ast_tree)
+        expected_code = """#include <iostream>
+
+void test_lambdas() {
+    auto double = [](auto x) { return x * 2; };
+    int result1 = double(5);
+    std::cout << result1 << std::endl;
+    auto add = [](auto x, auto y) { return x + y; };
+    int result2 = add(3, 4);
+    std::cout << result2 << std::endl;
+    auto multiply = [](auto a, auto b) { return a * b + 10; };
+    int result3 = multiply(2, 3);
+    std::cout << result3 << std::endl;
+    return result1;
+}"""
+        self.assertEqual(cpp_code, expected_code)
+
+    def test_generate_string_methods(self):
+        ast_tree = parse_file("examples/string_methods_example.py")
+        cpp_code = generate_cpp(ast_tree)
+        expected_code = """#include "string_utils.hpp"
+#include <string>
+
+void test_string_methods(std::string text) {
+    auto words = string_utils::split(text, " ");
+    auto csv_values = string_utils::split(text, ",");
+    auto whitespace_split = string_utils::split(text);
+    auto trimmed = string_utils::strip(text);
+    auto left_trim = string_utils::lstrip(text);
+    auto right_trim = string_utils::rstrip(text);
+    auto joined = string_utils::join(",", words);
+    auto replaced = string_utils::replace(text, "old", "new");
+    auto starts = string_utils::startswith(text, "Hello");
+    auto ends = string_utils::endswith(text, "world");
+    return joined;
+}"""
+        self.assertEqual(cpp_code, expected_code)
+
+    def test_generate_dict_iteration(self):
+        ast_tree = parse_file("examples/dict_iteration_example.py")
+        cpp_code = generate_cpp(ast_tree)
+        expected_code = """#include <iostream>
+#include <map>
+
+void test_dict_iteration() {
+    auto data = {{"a", 1}, {"b", 2}, {"c", 3}};
+    for (auto& [key, value] : data) {
+        std::cout << key << " " << value << std::endl;
+    }
+    for (auto& _pair : data) {
+        auto key = _pair.first;
+        std::cout << key << std::endl;
+    }
+    for (auto& _pair : data) {
+        auto value = _pair.second;
+        std::cout << value << std::endl;
+    }
+}"""
+        self.assertEqual(cpp_code, expected_code)
+
+    def test_generate_list_methods(self):
+        ast_tree = parse_file("examples/list_methods_example.py")
+        cpp_code = generate_cpp(ast_tree)
+        expected_code = """#include <algorithm>
+
+void test_list_methods() {
+    auto numbers = {1, 2, 3, 4, 5};
+    auto more_numbers = {6, 7, 8};
+    numbers.insert(numbers.end(), more_numbers.begin(), more_numbers.end());
+    numbers.insert(numbers.begin() + 0, 0);
+    numbers.erase(std::remove(numbers.begin(), numbers.end(), 3), numbers.end());
+    int idx = std::distance(numbers.begin(), std::find(numbers.begin(), numbers.end(), 5));
+    int count = std::count(numbers.begin(), numbers.end(), 2);
+    return idx;
+}"""
+        self.assertEqual(cpp_code, expected_code)
+
 if __name__ == "__main__":
     unittest.main()

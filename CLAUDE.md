@@ -103,6 +103,7 @@ The transpiler now supports:
 **Core Language Features:**
 - Function definitions with type annotations
 - **Async functions** (async def) with C++20 coroutines - **NEW**
+- **Lambda functions** → C++ lambdas with auto parameters - **NEW**
 - Classes with constructors (__init__) and methods
 - Control flow: if/else, for loops, while loops
 - Loop control: break, continue
@@ -181,13 +182,29 @@ Type Inference:
 - `str()` → `std::to_string()`
 - `int()` → `std::stoi()`
 
-**String Methods:**
+**String Methods (via string_utils.hpp):** - **NEW**
 - `.upper()` → std::transform with ::toupper
 - `.lower()` → std::transform with ::tolower
+- `.split(delimiter)` → `string_utils::split()`
+- `.strip()`, `.lstrip()`, `.rstrip()` → `string_utils::strip/lstrip/rstrip()`
+- `.join(items)` → `string_utils::join()`
+- `.replace(old, new)` → `string_utils::replace()`
+- `.startswith(prefix)`, `.endswith(suffix)` → `string_utils::startswith/endswith()`
 
 **List Methods:**
 - `.append()` → `.push_back()`
 - `.pop()` → `.pop_back()` or `.erase()`
+- `.extend(list2)` → `.insert(list.end(), list2.begin(), list2.end())` - **NEW**
+- `.insert(index, value)` → `.insert(list.begin() + index, value)` - **NEW**
+- `.remove(value)` → `.erase(std::remove(...), list.end())` - **NEW**
+- `.index(value)` → `std::distance(..., std::find(...))` - **NEW**
+- `.count(value)` → `std::count(...)` - **NEW**
+
+**Dictionary Support:** - **NEW**
+- Dictionary literals: `{"a": 1, "b": 2}` → `{{"a", 1}, {"b", 2}}`
+- `.items()` iteration → C++17 structured bindings: `for (auto& [key, value] : dict)`
+- `.keys()` iteration → `for (auto& _pair : dict) { auto key = _pair.first; }`
+- `.values()` iteration → `for (auto& _pair : dict) { auto value = _pair.second; }`
 
 **Class Support:**
 - Class definitions with member variables

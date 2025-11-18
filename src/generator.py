@@ -239,16 +239,28 @@ class CppGenerator(ast.NodeVisitor):
             self.code.append(f"{self.indent()}{target} = {value};")
         else:
             # Regular variable assignment
-            if "requests::get" in value:
+            if isinstance(node.value, ast.Dict):
+                # Dictionary literal - use auto for type inference
+                var_type = "auto"
+            elif isinstance(node.value, ast.List):
+                # List literal - use auto for type inference
+                var_type = "auto"
+            elif isinstance(node.value, ast.Lambda):
+                # Lambda functions should use auto
+                var_type = "auto"
+            elif value and "requests::get" in value:
                 var_type = "cpr::Response"
-            elif "nc::" in value or ".reshape(" in value or ".transpose(" in value:
+            elif value and ("nc::" in value or ".reshape(" in value or ".transpose(" in value):
                 # NumPy array - use auto for type inference
                 var_type = "auto"
-            elif "std::thread" in value:
+            elif value and "std::thread" in value:
                 # Multiprocessing thread
                 var_type = "std::thread"
-            elif "std::mutex" in value:
+            elif value and "std::mutex" in value:
                 var_type = "std::mutex"
+            elif value and "string_utils::" in value:
+                # String utility functions - use auto for type inference
+                var_type = "auto"
             else:
                 var_type = "int"
             self.code.append(f"{self.indent()}{var_type} {target} = {value};")
@@ -299,6 +311,41 @@ class CppGenerator(ast.NodeVisitor):
             self.headers.add("<algorithm>")
             self.headers.add("<cctype>")
             return f"std::transform({obj}.begin(), {obj}.end(), {obj}.begin(), ::tolower), {obj}"
+        elif func.endswith(".split"):
+            obj = func.replace(".split", "")
+            self.headers.add('"string_utils.hpp"')
+            if args:
+                return f"string_utils::split({obj}, {args[0]})"
+            else:
+                return f"string_utils::split({obj})"
+        elif func.endswith(".strip"):
+            obj = func.replace(".strip", "")
+            self.headers.add('"string_utils.hpp"')
+            return f"string_utils::strip({obj})"
+        elif func.endswith(".lstrip"):
+            obj = func.replace(".lstrip", "")
+            self.headers.add('"string_utils.hpp"')
+            return f"string_utils::lstrip({obj})"
+        elif func.endswith(".rstrip"):
+            obj = func.replace(".rstrip", "")
+            self.headers.add('"string_utils.hpp"')
+            return f"string_utils::rstrip({obj})"
+        elif func.endswith(".join"):
+            obj = func.replace(".join", "")
+            self.headers.add('"string_utils.hpp"')
+            return f"string_utils::join({obj}, {args[0]})"
+        elif func.endswith(".replace"):
+            obj = func.replace(".replace", "")
+            self.headers.add('"string_utils.hpp"')
+            return f"string_utils::replace({obj}, {', '.join(args)})"
+        elif func.endswith(".startswith"):
+            obj = func.replace(".startswith", "")
+            self.headers.add('"string_utils.hpp"')
+            return f"string_utils::startswith({obj}, {args[0]})"
+        elif func.endswith(".endswith"):
+            obj = func.replace(".endswith", "")
+            self.headers.add('"string_utils.hpp"')
+            return f"string_utils::endswith({obj}, {args[0]})"
         # List methods
         elif func.endswith(".append"):
             obj = func.replace(".append", "")
@@ -310,6 +357,26 @@ class CppGenerator(ast.NodeVisitor):
                 return f"{obj}.erase({obj}.begin() + {args[0]})"
             else:
                 return f"{obj}.pop_back()"
+        elif func.endswith(".extend"):
+            obj = func.replace(".extend", "")
+            self.headers.add("<algorithm>")
+            return f"{obj}.insert({obj}.end(), {args[0]}.begin(), {args[0]}.end())"
+        elif func.endswith(".insert"):
+            obj = func.replace(".insert", "")
+            return f"{obj}.insert({obj}.begin() + {args[0]}, {args[1]})"
+        elif func.endswith(".remove"):
+            obj = func.replace(".remove", "")
+            self.headers.add("<algorithm>")
+            return f"{obj}.erase(std::remove({obj}.begin(), {obj}.end(), {args[0]}), {obj}.end())"
+        elif func.endswith(".index"):
+            obj = func.replace(".index", "")
+            self.headers.add("<algorithm>")
+            # Returns index of first occurrence
+            return f"std::distance({obj}.begin(), std::find({obj}.begin(), {obj}.end(), {args[0]}))"
+        elif func.endswith(".count"):
+            obj = func.replace(".count", "")
+            self.headers.add("<algorithm>")
+            return f"std::count({obj}.begin(), {obj}.end(), {args[0]})"
         # NumPy array creation functions
         elif func in ["np.array", "numpy.array"]:
             # np.array([1,2,3]) → nc::NdArray<int>({1,2,3})
@@ -566,7 +633,63 @@ class CppGenerator(ast.NodeVisitor):
         elements = [self.visit(elt) for elt in node.elts]
         return f"{{{', '.join(elements)}}}"
 
+    def visit_Dict(self, node):
+        # For dictionary literals like {"a": 1, "b": 2}
+        # Use std::map or initializer list
+        self.headers.add("<map>")
+        pairs = []
+        for key, value in zip(node.keys, node.values):
+            k = self.visit(key)
+            v = self.visit(value)
+            pairs.append(f"{{{k}, {v}}}")
+        return f"{{{', '.join(pairs)}}}"
+
     def visit_For(self, node):
+        # Check if this is dictionary iteration (.items(), .keys(), .values())
+        if isinstance(node.iter, ast.Call):
+            func = node.iter.func
+            if isinstance(func, ast.Attribute):
+                dict_obj = self.visit(func.value)
+                method = func.attr
+
+                if method == "items":
+                    # for key, value in dict.items() → for (auto& [key, value] : dict)
+                    if isinstance(node.target, ast.Tuple):
+                        # Structured binding (C++17)
+                        vars = [self.visit(elt) for elt in node.target.elts]
+                        self.code.append(f"{self.indent()}for (auto& [{', '.join(vars)}] : {dict_obj}) {{")
+                    else:
+                        # Single variable for pair
+                        target = self.visit(node.target)
+                        self.code.append(f"{self.indent()}for (auto& {target} : {dict_obj}) {{")
+                elif method == "keys":
+                    # for key in dict.keys() → for (auto& pair : dict) { auto key = pair.first;
+                    target = self.visit(node.target)
+                    self.code.append(f"{self.indent()}for (auto& _pair : {dict_obj}) {{")
+                    self.indentation_level += 1
+                    self.code.append(f"{self.indent()}auto {target} = _pair.first;")
+                    self.indentation_level -= 1
+                elif method == "values":
+                    # for value in dict.values() → for (auto& pair : dict) { auto value = pair.second;
+                    target = self.visit(node.target)
+                    self.code.append(f"{self.indent()}for (auto& _pair : {dict_obj}) {{")
+                    self.indentation_level += 1
+                    self.code.append(f"{self.indent()}auto {target} = _pair.second;")
+                    self.indentation_level -= 1
+                else:
+                    # Regular iteration
+                    target = self.visit(node.target)
+                    iter_name = self.visit(node.iter)
+                    self.code.append(f"{self.indent()}for (auto {target} : {iter_name}) {{")
+
+                self.indentation_level += 1
+                for stmt in node.body:
+                    self.visit(stmt)
+                self.indentation_level -= 1
+                self.code.append(f"{self.indent()}}}")
+                return
+
+        # Regular for loop
         target = self.visit(node.target)
         iter_name = self.visit(node.iter)
 
@@ -599,6 +722,25 @@ class CppGenerator(ast.NodeVisitor):
 
     def visit_Continue(self, node):
         self.code.append(f"{self.indent()}continue;")
+
+    def visit_Lambda(self, node):
+        # Lambda functions: lambda x, y: x + y → [](auto x, auto y) { return x + y; }
+        # Use auto for parameters since Python lambdas don't have type annotations
+        args = []
+        for arg in node.args.args:
+            # Check if we have type information for this parameter
+            param_name = arg.arg
+            if param_name in self.variable_types:
+                param_type = self.variable_types[param_name]
+            else:
+                param_type = "auto"
+            args.append(f"{param_type} {param_name}")
+
+        args_str = ", ".join(args)
+        body = self.visit(node.body)
+
+        # For simple expressions, create a single-line lambda
+        return f"[]({args_str}) {{ return {body}; }}"
 
     def visit_AugAssign(self, node):
         target = self.visit(node.target)

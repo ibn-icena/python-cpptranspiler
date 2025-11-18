@@ -102,6 +102,7 @@ The transpiler now supports:
 
 **Core Language Features:**
 - Function definitions with type annotations
+- **Async functions** (async def) with C++20 coroutines - **NEW**
 - Classes with constructors (__init__) and methods
 - Control flow: if/else, for loops, while loops
 - Loop control: break, continue
@@ -112,8 +113,11 @@ The transpiler now supports:
 - Variable assignments and augmented assignments
 - Function calls and method calls
 - String literals and f-strings
+- List and Tuple literals
 - List subscripting and type annotations
+- Multi-dimensional array indexing
 - Print function (maps to std::cout)
+- **Await expressions** (co_await) - **NEW**
 
 **Python Standard Library Support:**
 - `requests` module (via CPR library wrapper)
@@ -121,6 +125,55 @@ The transpiler now supports:
 - `math` module (maps to <cmath>)
 - `os` module (basic support via <filesystem>)
 - `sys` module (partial support)
+- **`numpy` module** (via NumCpp library) - **COMPREHENSIVE SUPPORT - NEW**
+- **`multiprocessing` module** (via C++ threading) - **NEW**
+- **`asyncio` module** (via C++20 coroutines) - **NEW**
+
+**NumPy/NumCpp Support - NEW:**
+
+Array Creation:
+- `np.array([1,2,3])` → `nc::NdArray<T>({1,2,3})` with intelligent type inference
+- `np.zeros(n)`, `np.ones(n)`, `np.arange()`, `np.linspace()`, `np.eye()`
+- `np.random.rand()`, `np.random.randn()`
+
+Mathematical Operations:
+- Basic: `np.sum()`, `np.mean()`, `np.std()`, `np.min()`, `np.max()`
+- Advanced: `np.dot()`, `np.matmul()`, `np.sqrt()`, `np.exp()`, `np.log()`, `np.abs()`
+- Analysis: `np.argmax()`, `np.argmin()`, `np.where()`
+
+Array Manipulation:
+- Stack/Combine: `np.concatenate()`, `np.vstack()`, `np.hstack()`, `np.stack()`
+- Transform: `arr.reshape()`, `arr.transpose()`, `arr.T`
+- Properties: `arr.shape`, `arr.size` (auto-converted to method calls)
+- Indexing: Multi-dimensional `arr[i,j]` → `arr(i,j)`
+
+Linear Algebra (np.linalg):
+- `det()` - determinant
+- `inv()` - matrix inverse
+- `eig()` - eigenvalues/eigenvectors
+- `solve()` - solve linear systems
+- `svd()` - singular value decomposition
+- `norm()` - matrix/vector norms
+
+Type Inference:
+- Automatic int vs double detection: `[1,2,3]` → `NdArray<int>`, `[1.0,2.0]` → `NdArray<double>`
+- Mixed types promote to double: `[1,2.0,3]` → `NdArray<double>`
+
+**Multiprocessing Support - NEW:**
+- `Process(target=func, args=(...))` → `std::thread(func, ...)`
+- `Lock()` → `std::mutex`
+- `thread.join()` → `thread.join()`
+- Automatic type inference for std::thread and std::mutex
+- **Note:** Python uses processes (separate memory), C++ uses threads (shared memory)
+
+**Async/Await Support (Requires C++20) - NEW:**
+- `async def func() -> T` → `Task<T> func()`
+- `await expr` → `co_await expr`
+- `return value` → `co_return value` in async functions
+- Full coroutine infrastructure with Task<T> wrapper (cpp_src/task.hpp)
+- Exception propagation through coroutines
+- Both `Task<T>` and `Task<void>` supported
+- **Note:** C++20 coroutines differ from Python's event loop model
 
 **Built-in Functions:**
 - `print()` → `std::cout`

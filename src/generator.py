@@ -30,6 +30,11 @@ class CppGenerator(ast.NodeVisitor):
             elif alias.name == "sys":
                 # sys module - no specific header, handled case-by-case
                 pass
+            elif alias.name == "numpy":
+                self.headers.add('"NumCpp.hpp"')
+                # Store the alias name (e.g., "np" if imported as "import numpy as np")
+                if not hasattr(self, 'numpy_alias'):
+                    self.numpy_alias = alias.asname if alias.asname else "numpy"
 
     def visit_ClassDef(self, node):
         class_name = node.name
@@ -171,6 +176,9 @@ class CppGenerator(ast.NodeVisitor):
             # Regular variable assignment
             if "requests::get" in value:
                 var_type = "cpr::Response"
+            elif "nc::" in value or ".reshape(" in value or ".transpose(" in value:
+                # NumPy array - use auto for type inference
+                var_type = "auto"
             else:
                 var_type = "int"
             self.code.append(f"{self.indent()}{var_type} {target} = {value};")
@@ -232,6 +240,53 @@ class CppGenerator(ast.NodeVisitor):
                 return f"{obj}.erase({obj}.begin() + {args[0]})"
             else:
                 return f"{obj}.pop_back()"
+        # NumPy array creation functions
+        elif func in ["np.array", "numpy.array"]:
+            # np.array([1,2,3]) → nc::NdArray<double>({1,2,3})
+            return f"nc::NdArray<double>({{{', '.join(args)}}})"
+        elif func in ["np.zeros", "numpy.zeros"]:
+            return f"nc::zeros<double>({', '.join(args)})"
+        elif func in ["np.ones", "numpy.ones"]:
+            return f"nc::ones<double>({', '.join(args)})"
+        elif func in ["np.arange", "numpy.arange"]:
+            return f"nc::arange<double>({', '.join(args)})"
+        elif func in ["np.linspace", "numpy.linspace"]:
+            return f"nc::linspace<double>({', '.join(args)})"
+        elif func in ["np.eye", "numpy.eye"]:
+            return f"nc::eye<double>({', '.join(args)})"
+        # NumPy random functions
+        elif func in ["np.random.rand", "numpy.random.rand"]:
+            return f"nc::random::rand<double>(nc::Shape({', '.join(args)}))"
+        elif func in ["np.random.randn", "numpy.random.randn"]:
+            return f"nc::random::standardNormal<double>(nc::Shape({', '.join(args)}))"
+        # NumPy mathematical functions (that take arrays)
+        elif func in ["np.sum", "numpy.sum"]:
+            return f"nc::sum({', '.join(args)})"
+        elif func in ["np.mean", "numpy.mean"]:
+            return f"nc::mean({', '.join(args)})"
+        elif func in ["np.std", "numpy.std"]:
+            return f"nc::stdev({', '.join(args)})"
+        elif func in ["np.min", "numpy.min"]:
+            return f"nc::min({', '.join(args)})"
+        elif func in ["np.max", "numpy.max"]:
+            return f"nc::max({', '.join(args)})"
+        elif func in ["np.dot", "numpy.dot"]:
+            return f"nc::dot({', '.join(args)})"
+        elif func in ["np.sqrt", "numpy.sqrt"]:
+            return f"nc::sqrt({', '.join(args)})"
+        elif func in ["np.exp", "numpy.exp"]:
+            return f"nc::exp({', '.join(args)})"
+        elif func in ["np.log", "numpy.log"]:
+            return f"nc::log({', '.join(args)})"
+        elif func in ["np.abs", "numpy.abs"]:
+            return f"nc::abs({', '.join(args)})"
+        # NumPy array methods
+        elif func.endswith(".reshape"):
+            obj = func.replace(".reshape", "")
+            return f"{obj}.reshape({', '.join(args)})"
+        elif func.endswith(".transpose"):
+            obj = func.replace(".transpose", "")
+            return f"{obj}.transpose()"
         return f"{func}({', '.join(args)})"
 
     def visit_Attribute(self, node):
@@ -239,6 +294,13 @@ class CppGenerator(ast.NodeVisitor):
         # Handle self.attribute -> just attribute (or this->attribute in C++)
         if value == "self":
             return node.attr
+        # Handle NumPy array attributes that are properties in Python but methods in NumCpp
+        elif node.attr == "shape":
+            return f"{value}.shape()"
+        elif node.attr == "size":
+            return f"{value}.size()"
+        elif node.attr == "T":
+            return f"{value}.transpose()"
         return f"{value}.{node.attr}"
 
     def visit_Expr(self, node):
@@ -339,11 +401,27 @@ class CppGenerator(ast.NodeVisitor):
 
     def visit_Subscript(self, node):
         value = self.visit(node.value)
-        slice = self.visit(node.slice)
-        if value == "list":
-            self.headers.add("<vector>")
-            return f"std::vector<{slice}>"
-        return f"{value}[{slice}]"
+        # Check if this is multi-dimensional indexing (NumPy array)
+        if isinstance(node.slice, ast.Tuple):
+            # Multi-dimensional indexing: arr[i,j] → arr(i,j) for NumCpp
+            indices = [self.visit(dim) for dim in node.slice.elts]
+            return f"{value}({', '.join(indices)})"
+        else:
+            slice = self.visit(node.slice)
+            if value == "list":
+                self.headers.add("<vector>")
+                return f"std::vector<{slice}>"
+            return f"{value}[{slice}]"
+
+    def visit_Tuple(self, node):
+        # For tuple literals like (1, 2, 3)
+        elements = [self.visit(elt) for elt in node.elts]
+        return f"{{{', '.join(elements)}}}"
+
+    def visit_List(self, node):
+        # For list literals like [1, 2, 3]
+        elements = [self.visit(elt) for elt in node.elts]
+        return f"{{{', '.join(elements)}}}"
 
     def visit_For(self, node):
         target = self.visit(node.target)

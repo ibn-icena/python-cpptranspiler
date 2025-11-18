@@ -105,6 +105,7 @@ The transpiler now supports:
 - **Async functions** (async def) with C++20 coroutines - **NEW**
 - **Lambda functions** → C++ lambdas with auto parameters - **NEW**
 - **List comprehensions** with filters and nesting → IIFE pattern - **NEW**
+- **Exception handling** (try/except/finally/raise) → C++ try/catch - **NEW**
 - Classes with constructors (__init__) and methods
 - Control flow: if/else, for loops, while loops
 - Loop control: break, continue
@@ -192,6 +193,22 @@ Type Inference:
 - Power operator `**` → `std::pow(base, exp)`
 - Modulo operator `%` → `%`
 
+**Exception Handling:** - **NEW**
+- Try/Except: `try: ... except ExceptionType: ...` → `try { ... } catch (const std::exception&) { ... }`
+- Exception with variable: `except ValueError as e:` → `catch (const std::invalid_argument& e)`
+- Catch-all: `except:` → `catch (...)`
+- Finally block: `finally:` → code after all catch blocks (limited semantics)
+- Raise exceptions: `raise ValueError("msg")` → `throw std::invalid_argument("msg")`
+- Re-raise: `raise` → `throw;`
+- Exception type mapping:
+  - `Exception` → `std::exception`
+  - `ValueError`, `TypeError` → `std::invalid_argument`
+  - `RuntimeError` → `std::runtime_error`
+  - `KeyError`, `IndexError` → `std::out_of_range`
+  - `ZeroDivisionError` → `std::overflow_error`
+  - `FileNotFoundError`, `IOError` → `std::runtime_error`
+- **Note:** C++ finally doesn't have same semantics as Python (won't execute on uncaught exceptions)
+
 **String Methods (via string_utils.hpp):** - **NEW**
 - `.upper()` → std::transform with ::toupper
 - `.lower()` → std::transform with ::tolower
@@ -225,7 +242,6 @@ Type Inference:
 ## Current Limitations
 
 The transpiler does NOT yet support:
-- Exception handling (try/except)
 - Decorators
 - Dict/Set comprehensions (list comprehensions are supported)
 - Multiple return values / tuple unpacking

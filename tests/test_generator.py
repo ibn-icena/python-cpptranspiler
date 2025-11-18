@@ -217,5 +217,17 @@ void test_list_methods() {
         self.assertIn("<cmath>", cpp_code)
         self.assertIn("<vector>", cpp_code)
 
+    def test_generate_exception_handling(self):
+        ast_tree = parse_file("examples/exception_example.py")
+        cpp_code = generate_cpp(ast_tree)
+        # Verify key exception handling elements
+        self.assertIn("<stdexcept>", cpp_code)
+        self.assertIn("try {", cpp_code)
+        self.assertIn("catch (const std::overflow_error&)", cpp_code)
+        self.assertIn("catch (const std::out_of_range& e)", cpp_code)
+        self.assertIn("catch (const std::exception& e)", cpp_code)
+        self.assertIn("throw std::invalid_argument", cpp_code)
+        self.assertIn("Cleanup", cpp_code)  # Finally block content
+
 if __name__ == "__main__":
     unittest.main()

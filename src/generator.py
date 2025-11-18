@@ -604,6 +604,90 @@ class CppGenerator(ast.NodeVisitor):
         else:
             self.code.append(f"{self.indent()}}}")
 
+    def visit_Try(self, node):
+        # Try/except/finally → C++ try/catch
+        self.headers.add("<stdexcept>")
+
+        # Try block
+        self.code.append(f"{self.indent()}try {{")
+        self.indentation_level += 1
+        for stmt in node.body:
+            self.visit(stmt)
+        self.indentation_level -= 1
+        self.code.append(f"{self.indent()}}}")
+
+        # Exception handlers (except clauses)
+        for handler in node.handlers:
+            if handler.type:
+                # Specific exception type
+                exc_type = self.visit(handler.type)
+                # Map Python exception types to C++ exception types
+                cpp_exc_type = self._map_exception_type(exc_type)
+
+                if handler.name:
+                    # except ExceptionType as variable:
+                    self.code.append(f"{self.indent()}catch (const {cpp_exc_type}& {handler.name}) {{")
+                else:
+                    # except ExceptionType:
+                    self.code.append(f"{self.indent()}catch (const {cpp_exc_type}&) {{")
+            else:
+                # Catch-all: except:
+                self.code.append(f"{self.indent()}catch (...) {{")
+
+            self.indentation_level += 1
+            for stmt in handler.body:
+                self.visit(stmt)
+            self.indentation_level -= 1
+            self.code.append(f"{self.indent()}}}")
+
+        # Finally block - execute after all catch blocks
+        if node.finalbody:
+            # Note: C++ doesn't have finally, but we can approximate by adding code after catch blocks
+            # This won't execute if there's an uncaught exception, but that's a limitation
+            for stmt in node.finalbody:
+                self.visit(stmt)
+
+    def _map_exception_type(self, python_type):
+        """Map Python exception types to C++ exception types"""
+        exception_map = {
+            "Exception": "std::exception",
+            "ValueError": "std::invalid_argument",
+            "TypeError": "std::invalid_argument",
+            "RuntimeError": "std::runtime_error",
+            "KeyError": "std::out_of_range",
+            "IndexError": "std::out_of_range",
+            "ZeroDivisionError": "std::overflow_error",
+            "FileNotFoundError": "std::runtime_error",
+            "IOError": "std::runtime_error",
+        }
+        return exception_map.get(python_type, "std::exception")
+
+    def visit_Raise(self, node):
+        # Raise exception
+        self.headers.add("<stdexcept>")
+        if node.exc:
+            exc_type = None
+            exc_msg = None
+
+            if isinstance(node.exc, ast.Call):
+                # raise ExceptionType("message")
+                exc_type = self.visit(node.exc.func)
+                if node.exc.args:
+                    exc_msg = self.visit(node.exc.args[0])
+            elif isinstance(node.exc, ast.Name):
+                # raise exception_variable
+                exc_type = self.visit(node.exc)
+
+            cpp_exc_type = self._map_exception_type(exc_type) if exc_type else "std::runtime_error"
+
+            if exc_msg:
+                self.code.append(f"{self.indent()}throw {cpp_exc_type}({exc_msg});")
+            else:
+                self.code.append(f'{self.indent()}throw {cpp_exc_type}("Exception");')
+        else:
+            # re-raise current exception
+            self.code.append(f"{self.indent()}throw;")
+
     def visit_Compare(self, node):
         left = self.visit(node.left)
         op = self.visit(node.ops[0])

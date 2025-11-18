@@ -104,10 +104,11 @@ The transpiler now supports:
 - Function definitions with type annotations
 - **Async functions** (async def) with C++20 coroutines - **NEW**
 - **Lambda functions** → C++ lambdas with auto parameters - **NEW**
+- **List comprehensions** with filters and nesting → IIFE pattern - **NEW**
 - Classes with constructors (__init__) and methods
 - Control flow: if/else, for loops, while loops
 - Loop control: break, continue
-- Binary operations: +, -, *, /
+- Binary operations: +, -, *, /, %, ** (power) - **% and ** NEW**
 - Unary operations: +, -, ! (not)
 - Comparisons: >, <, ==, !=, >=, <=
 - Boolean operators: and (&&), or (||), not (!)
@@ -181,6 +182,15 @@ Type Inference:
 - `len()` → `.size()`
 - `str()` → `std::to_string()`
 - `int()` → `std::stoi()`
+- **`range(n)`, `range(start, stop)`, `range(start, stop, step)`** → vector-based range generation - **NEW**
+
+**List Comprehensions:** - **NEW**
+- Basic: `[x**2 for x in range(10)]` → IIFE with vector building loop
+- With filter: `[x for x in nums if x > 0]` → nested if inside loop
+- Nested: `[[i*j for j in range(3)] for i in range(3)]` → nested IIFEs
+- Supports arbitrary expressions and multiple filters
+- Power operator `**` → `std::pow(base, exp)`
+- Modulo operator `%` → `%`
 
 **String Methods (via string_utils.hpp):** - **NEW**
 - `.upper()` → std::transform with ::toupper
@@ -217,17 +227,14 @@ Type Inference:
 The transpiler does NOT yet support:
 - Exception handling (try/except)
 - Decorators
-- Lambda functions
-- Comprehensions (list/dict/set)
+- Dict/Set comprehensions (list comprehensions are supported)
 - Multiple return values / tuple unpacking
 - Context managers (with statements)
 - Generators and iterators
 - Multiple inheritance
 - Property decorators
 - Static and class methods
-- Advanced string methods (.split(), .join(), .strip(), etc.)
-- Advanced list operations (slicing, .extend(), .insert(), etc.)
-- Dictionary iteration and methods
+- List/String slicing (subscripting works)
 - Set operations
 - File I/O operations
 

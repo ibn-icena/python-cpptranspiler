@@ -207,5 +207,15 @@ void test_list_methods() {
 }"""
         self.assertEqual(cpp_code, expected_code)
 
+    def test_generate_list_comprehension(self):
+        ast_tree = parse_file("examples/list_comprehension_example.py")
+        cpp_code = generate_cpp(ast_tree)
+        # Just verify it contains the key elements
+        self.assertIn("std::vector<int> _result", cpp_code)
+        self.assertIn("std::pow(x, 2)", cpp_code)
+        self.assertIn("x % 2 == 0", cpp_code)
+        self.assertIn("<cmath>", cpp_code)
+        self.assertIn("<vector>", cpp_code)
+
 if __name__ == "__main__":
     unittest.main()

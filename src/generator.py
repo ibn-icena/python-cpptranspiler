@@ -245,6 +245,9 @@ class CppGenerator(ast.NodeVisitor):
             elif isinstance(node.value, ast.List):
                 # List literal - use auto for type inference
                 var_type = "auto"
+            elif isinstance(node.value, ast.ListComp):
+                # List comprehension - use auto for type inference
+                var_type = "auto"
             elif isinstance(node.value, ast.Lambda):
                 # Lambda functions should use auto
                 var_type = "auto"
@@ -282,6 +285,19 @@ class CppGenerator(ast.NodeVisitor):
             return f"std::to_string({args[0]})"
         elif func == "int":
             return f"std::stoi({args[0]})"
+        elif func == "range":
+            # range() function for list comprehensions
+            self.headers.add("<vector>")
+            if len(args) == 1:
+                # range(n) → generates 0 to n-1
+                return f"[&](){{ std::vector<int> _r; for(int _i=0; _i<{args[0]}; _i++) _r.push_back(_i); return _r; }}()"
+            elif len(args) == 2:
+                # range(start, stop) → custom range generator
+                return f"[&](){{ std::vector<int> _r; for(int _i={args[0]}; _i<{args[1]}; _i++) _r.push_back(_i); return _r; }}()"
+            elif len(args) == 3:
+                # range(start, stop, step)
+                return f"[&](){{ std::vector<int> _r; for(int _i={args[0]}; _i<{args[1]}; _i+={args[2]}) _r.push_back(_i); return _r; }}()"
+            return "std::vector<int>()"
         # Math module functions
         elif func.startswith("math."):
             math_func = func.replace("math.", "std::")
@@ -524,8 +540,14 @@ class CppGenerator(ast.NodeVisitor):
 
     def visit_BinOp(self, node):
         left = self.visit(node.left)
-        op = self.visit(node.op)
         right = self.visit(node.right)
+
+        # Handle power operator specially
+        if isinstance(node.op, ast.Pow):
+            self.headers.add("<cmath>")
+            return f"std::pow({left}, {right})"
+
+        op = self.visit(node.op)
         return f"{left} {op} {right}"
 
     def visit_UnaryOp(self, node):
@@ -556,6 +578,14 @@ class CppGenerator(ast.NodeVisitor):
 
     def visit_Div(self, node):
         return "/"
+
+    def visit_Mod(self, node):
+        return "%"
+
+    def visit_Pow(self, node):
+        # Power operator ** → std::pow
+        # This is handled differently - we need to modify visit_BinOp
+        return "**"  # Placeholder, actual conversion happens in visit_BinOp
 
     def visit_If(self, node):
         test = self.visit(node.test)
@@ -643,6 +673,43 @@ class CppGenerator(ast.NodeVisitor):
             v = self.visit(value)
             pairs.append(f"{{{k}, {v}}}")
         return f"{{{', '.join(pairs)}}}"
+
+    def visit_ListComp(self, node):
+        # List comprehension: [expr for var in iterable if condition]
+        # Generate as immediately-invoked lambda expression (IIFE)
+        self.headers.add("<vector>")
+
+        # Build the comprehension as an IIFE
+        lines = []
+        lines.append("[]() {")
+        lines.append("    std::vector<int> _result;")
+
+        # Handle generators (for loops)
+        for gen in node.generators:
+            target = self.visit(gen.target)
+            iter_expr = self.visit(gen.iter)
+            lines.append(f"    for (auto {target} : {iter_expr}) {{")
+
+            # Handle filters (if conditions)
+            for if_clause in gen.ifs:
+                condition = self.visit(if_clause)
+                lines.append(f"        if ({condition}) {{")
+
+        # Generate the element expression
+        element = self.visit(node.elt)
+        indent = "    " + "    " * len(node.generators) + "    " * sum(len(g.ifs) for g in node.generators)
+        lines.append(f"{indent}_result.push_back({element});")
+
+        # Close all the blocks
+        for gen in reversed(node.generators):
+            for _ in gen.ifs:
+                lines.append("        }")
+            lines.append("    }")
+
+        lines.append("    return _result;")
+        lines.append("}()")
+
+        return "\n".join(lines)
 
     def visit_For(self, node):
         # Check if this is dictionary iteration (.items(), .keys(), .values())

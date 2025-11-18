@@ -9,6 +9,8 @@ class CppGenerator(ast.NodeVisitor):
         self.variable_types = {}  # Track variable types for type inference
         self.current_class = None  # Track current class name
         self.class_members = {}  # Track member variables by class
+        self.async_functions = set()  # Track async functions
+        self.current_function_is_async = False  # Track if currently in async function
 
     def indent(self):
         return " " * self.indentation_level * 4
@@ -63,8 +65,9 @@ class CppGenerator(ast.NodeVisitor):
             self.headers.add("<vector>")
             self.headers.add("<mutex>")
         elif node.module == "asyncio":
-            # Will handle async/await later
-            pass
+            self.headers.add("<coroutine>")
+            self.headers.add('"task.hpp"')
+            self.headers.add("<vector>")
 
     def visit_ClassDef(self, node):
         class_name = node.name
@@ -142,6 +145,38 @@ class CppGenerator(ast.NodeVisitor):
             self.visit(stmt)
         self.indentation_level -= 1
         self.code.append(f"{self.indent()}}}")
+
+    def visit_AsyncFunctionDef(self, node):
+        # Async function - generate C++20 coroutine
+        self.headers.add("<coroutine>")
+        self.headers.add('"task.hpp"')
+
+        is_method = self.current_class is not None
+        args = node.args.args[1:] if is_method else node.args.args
+
+        return_type = self.visit(node.returns) if node.returns else "void"
+        function_name = node.name
+        args_str = ', '.join([self.visit(arg) for arg in args])
+
+        # Mark this function as async
+        self.async_functions.add(function_name)
+        self.current_function_is_async = True
+
+        # Wrap return type in Task<T>
+        coroutine_return_type = f"Task<{return_type}>"
+
+        if is_method:
+            self.code.append(f"{self.indent()}{coroutine_return_type} {function_name}({args_str}) {{")
+        else:
+            self.code.append(f"{coroutine_return_type} {function_name}({args_str}) {{")
+
+        self.indentation_level += 1
+        for stmt in node.body:
+            self.visit(stmt)
+        self.indentation_level -= 1
+        self.code.append(f"{self.indent()}}}")
+
+        self.current_function_is_async = False
 
     def visit_arg(self, node):
         arg_type = self.visit(node.annotation)
@@ -409,7 +444,16 @@ class CppGenerator(ast.NodeVisitor):
 
     def visit_Return(self, node):
         value = self.visit(node.value)
-        self.code.append(f"{self.indent()}return {value};")
+        # Use co_return in async functions
+        if self.current_function_is_async:
+            self.code.append(f"{self.indent()}co_return {value};")
+        else:
+            self.code.append(f"{self.indent()}return {value};")
+
+    def visit_Await(self, node):
+        # await expr → co_await expr
+        value = self.visit(node.value)
+        return f"co_await {value}"
 
     def visit_BinOp(self, node):
         left = self.visit(node.left)

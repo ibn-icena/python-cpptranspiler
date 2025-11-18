@@ -49,6 +49,22 @@ class CppGenerator(ast.NodeVisitor):
                 # Store the alias name (e.g., "np" if imported as "import numpy as np")
                 if not hasattr(self, 'numpy_alias'):
                     self.numpy_alias = alias.asname if alias.asname else "numpy"
+            elif alias.name == "multiprocessing":
+                self.headers.add("<thread>")
+                self.headers.add("<future>")
+                self.headers.add("<vector>")
+                self.headers.add("<mutex>")
+
+    def visit_ImportFrom(self, node):
+        # Handle "from module import ..." statements
+        if node.module == "multiprocessing":
+            self.headers.add("<thread>")
+            self.headers.add("<future>")
+            self.headers.add("<vector>")
+            self.headers.add("<mutex>")
+        elif node.module == "asyncio":
+            # Will handle async/await later
+            pass
 
     def visit_ClassDef(self, node):
         class_name = node.name
@@ -193,6 +209,11 @@ class CppGenerator(ast.NodeVisitor):
             elif "nc::" in value or ".reshape(" in value or ".transpose(" in value:
                 # NumPy array - use auto for type inference
                 var_type = "auto"
+            elif "std::thread" in value:
+                # Multiprocessing thread
+                var_type = "std::thread"
+            elif "std::mutex" in value:
+                var_type = "std::mutex"
             else:
                 var_type = "int"
             self.code.append(f"{self.indent()}{var_type} {target} = {value};")
@@ -334,6 +355,37 @@ class CppGenerator(ast.NodeVisitor):
         elif func.endswith(".transpose"):
             obj = func.replace(".transpose", "")
             return f"{obj}.transpose()"
+        # Multiprocessing support
+        elif func == "Process":
+            # Process(target=func, args=(a, b)) → std::thread(func, a, b)
+            # Need to extract keyword arguments
+            target_func = None
+            thread_args = []
+            for i, keyword in enumerate(node.keywords):
+                if keyword.arg == "target":
+                    target_func = self.visit(keyword.value)
+                elif keyword.arg == "args":
+                    # args is a tuple, extract elements
+                    if isinstance(keyword.value, ast.Tuple):
+                        thread_args = [self.visit(elt) for elt in keyword.value.elts]
+            if target_func:
+                return f"std::thread({target_func}, {', '.join(thread_args)})"
+            return "std::thread()"
+        elif func == "Pool":
+            # Pool(n) → We'll use a placeholder, actual pool map will be handled separately
+            # For now, just note the pool size
+            return f"/* Pool with {args[0] if args else '4'} workers */"
+        elif func == "Lock":
+            return "std::mutex()"
+        # Pool methods
+        elif func.endswith(".start"):
+            # thread.start() → Not needed in C++, thread starts automatically
+            obj = func.replace(".start", "")
+            return f"/* {obj} starts automatically */"
+        elif func.endswith(".join"):
+            # thread.join() → thread.join()
+            obj = func.replace(".join", "")
+            return f"{obj}.join()"
         return f"{func}({', '.join(args)})"
 
     def visit_Attribute(self, node):

@@ -289,6 +289,9 @@ class CppGenerator(ast.NodeVisitor):
             elif value and "string_utils::" in value:
                 # String utility functions - use auto for type inference
                 var_type = "auto"
+            elif value and ("std::istreambuf_iterator" in value or "std::getline" in value or "_lines" in value):
+                # File operation results - use auto
+                var_type = "auto"
             else:
                 var_type = "int"
             self.code.append(f"{self.indent()}{var_type} {target} = {value};")
@@ -529,6 +532,26 @@ class CppGenerator(ast.NodeVisitor):
             # thread.join() → thread.join()
             obj = func.replace(".join", "")
             return f"{obj}.join()"
+        # File operations
+        elif func.endswith(".read"):
+            # file.read() → read entire file into string
+            obj = func.replace(".read", "")
+            self.headers.add("<sstream>")
+            self.headers.add("<iterator>")
+            return f"std::string((std::istreambuf_iterator<char>({obj})), std::istreambuf_iterator<char>())"
+        elif func.endswith(".readline"):
+            # file.readline() → read single line
+            obj = func.replace(".readline", "")
+            return f"[&](){{ std::string _line; std::getline({obj}, _line); return _line; }}()"
+        elif func.endswith(".readlines"):
+            # file.readlines() → read all lines into vector
+            obj = func.replace(".readlines", "")
+            self.headers.add("<vector>")
+            return f"[&](){{ std::vector<std::string> _lines; std::string _line; while(std::getline({obj}, _line)) _lines.push_back(_line); return _lines; }}()"
+        elif func.endswith(".write"):
+            # file.write(content) → write to file
+            obj = func.replace(".write", "")
+            return f"{obj} << {args[0]}"
         return f"{func}({', '.join(args)})"
 
     def visit_Attribute(self, node):
@@ -719,6 +742,60 @@ class CppGenerator(ast.NodeVisitor):
         else:
             # re-raise current exception
             self.code.append(f"{self.indent()}throw;")
+
+    def visit_With(self, node):
+        # Context manager: with open(...) as f:
+        self.headers.add("<fstream>")
+        self.headers.add("<string>")
+
+        # Process the first context manager (typically open())
+        item = node.items[0]
+        context_expr = item.context_expr
+
+        # Check if this is a file open() call
+        if isinstance(context_expr, ast.Call) and isinstance(context_expr.func, ast.Name) and context_expr.func.id == "open":
+            # Extract filename and mode
+            filename = self.visit(context_expr.args[0]) if context_expr.args else '""'
+            mode = "r"  # default mode
+
+            # Check for mode in args or keywords
+            if len(context_expr.args) > 1:
+                mode_node = context_expr.args[1]
+                if isinstance(mode_node, ast.Constant):
+                    mode = mode_node.value
+
+            # Determine C++ file stream type based on mode
+            if "w" in mode or "a" in mode:
+                stream_type = "std::ofstream"
+                stream_mode = "std::ios::out"
+                if "a" in mode:
+                    stream_mode += " | std::ios::app"
+            else:  # read mode
+                stream_type = "std::ifstream"
+                stream_mode = "std::ios::in"
+
+            # Get the variable name
+            var_name = self.visit(item.optional_vars) if item.optional_vars else "_file"
+
+            # Generate file stream opening
+            self.code.append(f"{self.indent()}{{")  # Block scope for RAII
+            self.indentation_level += 1
+            if "w" in mode or "a" in mode:
+                self.code.append(f"{self.indent()}{stream_type} {var_name}({filename}, {stream_mode});")
+            else:
+                self.code.append(f"{self.indent()}{stream_type} {var_name}({filename});")
+
+            # Process the body
+            for stmt in node.body:
+                self.visit(stmt)
+
+            self.indentation_level -= 1
+            self.code.append(f"{self.indent()}}}  // {var_name} closes automatically")
+        else:
+            # Generic context manager (not fully supported)
+            self.code.append(f"{self.indent()}// Unsupported context manager")
+            for stmt in node.body:
+                self.visit(stmt)
 
     def visit_Compare(self, node):
         left = self.visit(node.left)

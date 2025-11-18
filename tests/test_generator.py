@@ -240,5 +240,19 @@ void test_list_methods() {
         self.assertIn("auto [a, b] =", cpp_code)  # Direct unpacking
         self.assertIn("auto [x, y, z] = get_triple()", cpp_code)  # Triple unpacking
 
+    def test_generate_file_io(self):
+        ast_tree = parse_file("examples/file_io_example.py")
+        cpp_code = generate_cpp(ast_tree)
+        # Verify key file I/O elements
+        self.assertIn("<fstream>", cpp_code)
+        self.assertIn("std::ofstream f(", cpp_code)  # Write mode
+        self.assertIn("std::ifstream f(", cpp_code)  # Read mode
+        self.assertIn("std::ios::out", cpp_code)  # Write flag
+        self.assertIn("std::ios::app", cpp_code)  # Append flag
+        self.assertIn("std::istreambuf_iterator", cpp_code)  # read() operation
+        self.assertIn("std::getline", cpp_code)  # readlines() operation
+        self.assertIn("f << ", cpp_code)  # write() operation
+        self.assertIn("// f closes automatically", cpp_code)  # RAII comment
+
 if __name__ == "__main__":
     unittest.main()

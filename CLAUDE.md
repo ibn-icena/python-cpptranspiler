@@ -107,6 +107,7 @@ The transpiler now supports:
 - **List comprehensions** with filters and nesting → IIFE pattern - **NEW**
 - **Exception handling** (try/except/finally/raise) → C++ try/catch - **NEW**
 - **Tuple unpacking and multiple returns** → C++17 structured bindings - **NEW**
+- **File I/O with context managers** → std::fstream with RAII - **NEW**
 - Classes with constructors (__init__) and methods
 - Control flow: if/else, for loops, while loops
 - Loop control: break, continue
@@ -221,6 +222,23 @@ Type Inference:
 - **Limitation:** Cannot reassign existing variables (e.g., swap idiom `a, b = b, a` not supported)
 - **Note:** Functions returning tuples automatically get `auto` return type
 
+**File I/O with Context Managers:** - **NEW**
+- Context manager: `with open("file.txt", "r") as f:` → Block-scoped file stream with RAII
+- File modes:
+  - `"r"` (read) → `std::ifstream`
+  - `"w"` (write) → `std::ofstream` with `std::ios::out`
+  - `"a"` (append) → `std::ofstream` with `std::ios::out | std::ios::app`
+- File operations:
+  - `f.read()` → `std::string((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>())`
+  - `f.readline()` → `std::getline(f, line)` with IIFE
+  - `f.readlines()` → Read all lines into `std::vector<std::string>` with IIFE
+  - `f.write(content)` → `f << content`
+- RAII (Resource Acquisition Is Initialization):
+  - File automatically closes when block scope ends
+  - No explicit `close()` needed
+  - Exception-safe resource management
+- **Note:** Uses block scope `{ }` to ensure automatic file closure
+
 **String Methods (via string_utils.hpp):** - **NEW**
 - `.upper()` → std::transform with ::toupper
 - `.lower()` → std::transform with ::tolower
@@ -256,14 +274,13 @@ Type Inference:
 The transpiler does NOT yet support:
 - Decorators
 - Dict/Set comprehensions (list comprehensions are supported)
-- Context managers (with statements)
+- Custom context managers (only `with open()` file I/O is supported)
 - Generators and iterators
 - Multiple inheritance
 - Property decorators
 - Static and class methods
 - List/String slicing (subscripting works)
 - Set operations
-- File I/O operations
 - Variable reassignment via tuple unpacking (swap idiom)
 
 ## Adding Support for New Python Features

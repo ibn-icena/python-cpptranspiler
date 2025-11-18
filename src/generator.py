@@ -13,6 +13,20 @@ class CppGenerator(ast.NodeVisitor):
     def indent(self):
         return " " * self.indentation_level * 4
 
+    def infer_numpy_dtype(self, node):
+        """Infer NumPy array dtype from list/tuple elements"""
+        if isinstance(node, ast.List) or isinstance(node, ast.Tuple):
+            has_float = False
+            for elt in node.elts:
+                if isinstance(elt, ast.Constant):
+                    if isinstance(elt.value, float):
+                        has_float = True
+                    elif not isinstance(elt.value, int):
+                        # Unknown type, default to double
+                        return "double"
+            return "double" if has_float else "int"
+        return "double"  # Default
+
     def visit_Module(self, node):
         for stmt in node.body:
             self.visit(stmt)
@@ -242,8 +256,10 @@ class CppGenerator(ast.NodeVisitor):
                 return f"{obj}.pop_back()"
         # NumPy array creation functions
         elif func in ["np.array", "numpy.array"]:
-            # np.array([1,2,3]) → nc::NdArray<double>({1,2,3})
-            return f"nc::NdArray<double>({{{', '.join(args)}}})"
+            # np.array([1,2,3]) → nc::NdArray<int>({1,2,3})
+            # Infer type from array elements
+            dtype = self.infer_numpy_dtype(node.args[0]) if node.args else "double"
+            return f"nc::NdArray<{dtype}>({args[0]})"
         elif func in ["np.zeros", "numpy.zeros"]:
             return f"nc::zeros<double>({', '.join(args)})"
         elif func in ["np.ones", "numpy.ones"]:
@@ -280,6 +296,37 @@ class CppGenerator(ast.NodeVisitor):
             return f"nc::log({', '.join(args)})"
         elif func in ["np.abs", "numpy.abs"]:
             return f"nc::abs({', '.join(args)})"
+        # Advanced NumPy functions
+        elif func in ["np.matmul", "numpy.matmul"]:
+            return f"nc::matmul({', '.join(args)})"
+        elif func in ["np.argmax", "numpy.argmax"]:
+            return f"nc::argmax({', '.join(args)})"
+        elif func in ["np.argmin", "numpy.argmin"]:
+            return f"nc::argmin({', '.join(args)})"
+        elif func in ["np.where", "numpy.where"]:
+            return f"nc::where({', '.join(args)})"
+        elif func in ["np.concatenate", "numpy.concatenate"]:
+            return f"nc::concatenate({', '.join(args)})"
+        elif func in ["np.vstack", "numpy.vstack"]:
+            return f"nc::vstack({', '.join(args)})"
+        elif func in ["np.hstack", "numpy.hstack"]:
+            return f"nc::hstack({', '.join(args)})"
+        elif func in ["np.stack", "numpy.stack"]:
+            return f"nc::stack({', '.join(args)})"
+        # NumPy linalg module
+        elif func in ["np.linalg.det", "numpy.linalg.det"]:
+            return f"nc::linalg::det({', '.join(args)})"
+        elif func in ["np.linalg.inv", "numpy.linalg.inv"]:
+            return f"nc::linalg::inv({', '.join(args)})"
+        elif func in ["np.linalg.eig", "numpy.linalg.eig"]:
+            # Returns tuple, may need special handling
+            return f"nc::linalg::eig({', '.join(args)})"
+        elif func in ["np.linalg.solve", "numpy.linalg.solve"]:
+            return f"nc::linalg::solve({', '.join(args)})"
+        elif func in ["np.linalg.svd", "numpy.linalg.svd"]:
+            return f"nc::linalg::svd({', '.join(args)})"
+        elif func in ["np.linalg.norm", "numpy.linalg.norm"]:
+            return f"nc::linalg::norm({', '.join(args)})"
         # NumPy array methods
         elif func.endswith(".reshape"):
             obj = func.replace(".reshape", "")
